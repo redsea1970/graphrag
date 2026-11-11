@@ -14,6 +14,17 @@ _morph_tagger = NewsMorphTagger(_emb)
 _syntax_parser = NewsSyntaxParser(_emb)
 _ner_tagger = NewsNERTagger(_emb)
 
+# Словарь оверрайдов: Natasha иногда метит организации как LOC (Сбер, Газпром).
+ORG_OVERRIDES = {
+    "сбер": "ORG", "сбербанк": "ORG", "газпром": "ORG", "роснефть": "ORG",
+    "лукойл": "ORG", "яндекс": "ORG", "mail.ru": "ORG", "мтс": "ORG",
+    "билайн": "ORG", "мегафон": "ORG", "тинькофф": "ORG", "втб": "ORG",
+    "росбанк": "ORG", "аэрофлот": "ORG", "ржд": "ORG", "роснано": "ORG",
+    "ростелеком": "ORG", "росатом": "ORG", "альфа-банк": "ORG",
+    "альфабанк": "ORG", "ozon": "ORG", "озон": "ORG", "wildberries": "ORG",
+}
+
+
 
 @dataclass
 class Entity:
@@ -59,10 +70,12 @@ def extract_entities(text: str) -> List[Entity]:
     doc = _make_doc(text)
     out: List[Entity] = []
     for i, span in enumerate(doc.spans):
+        norm = span.normal or span.text
+        etype = ORG_OVERRIDES.get(norm.lower(), span.type)
         out.append(Entity(
             id=f"e{i}",
-            text=span.normal or span.text,
-            type=span.type,
+            text=norm,
+            type=etype,
             start=span.start,
             stop=span.stop,
         ))
