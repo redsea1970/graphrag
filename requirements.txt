@@ -1,0 +1,11 @@
+spacy
+natasha
+razdel
+sqlalchemy
+networkx
+langchain
+langchain-community
+neo4j
+python-dotenv
+pytest
+setuptools<81
