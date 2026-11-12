@@ -35,18 +35,28 @@ python rag_demo.py            # интерактивный режим
 - Neo4jRetriever    — живой Neo4j (docker compose up -d), связи типизированы (WORKS_AT/LOCATED_IN/RELATED_TO);
 - GraphJsonRetriever — офлайн, читает output/graph.json (используется в тестах и как fallback).
 
-LLM-слой: интерфейс LLMClient + MockLLM (детерминированный, без ключей и сети).
-Заглушки OllamaLLM / OpenAILLM показывают точку расширения для реальных провайдеров.
+LLM-слой: интерфейс LLMClient и три провайдера.
+- MockLLM    — детерминированный офлайн-ответ по найденным фактам (по умолчанию).
+- OllamaLLM  — локальная Ollama через HTTP POST /api/generate.
+                env: OLLAMA_HOST (default http://localhost:11434), OLLAMA_MODEL (default qwen2.5:7b).
+- OpenAILLM  — OpenAI-совместимый endpoint (lazy import, пакет `openai` ставится опционально).
+                env: OPENAI_API_KEY, OPENAI_MODEL (default gpt-4o-mini), OPENAI_BASE_URL.
+
+При недоступности Ollama/OpenAI клиент мягко фоллбэкает на MockLLM (в ответ добавляется префикс с причиной).
+Переключение провайдера в CLI:
+python rag_demo.py --llm mock   "Где работает Иван Петров?"
+python rag_demo.py --llm ollama "Где работает Иван Петров?"
+python rag_demo.py --llm openai "Где работает Иван Петров?"
 
 ## Структура
 - nlp/extract.py         — извлечение сущностей и связей (Natasha)
 - graph_builder.py       — построение графа, сохранение output/graph.json
 - load_neo4j.py          — загрузка графа в Neo4j (типизированные связи)
-- rag/llm.py             — LLMClient, MockLLM, заглушки провайдеров
+- rag/llm.py             — LLMClient, MockLLM, OllamaLLM, OpenAILLM
 - rag/retriever.py       — Neo4jRetriever, GraphJsonRetriever
 - rag/qa.py              — RAGPipeline (вопрос -> факты -> ответ)
 - rag_demo.py            — CLI-демо
 - tests/                 — pytest (NLP + RAG)
 
 ## Тесты
-python -m pytest -q
+$env:PYTHONPATH="."; python -m pytest -q
