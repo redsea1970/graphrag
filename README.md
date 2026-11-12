@@ -6,15 +6,6 @@
 Python 3.13, spaCy, Natasha, NetworkX, Neo4j (Docker), LangChain.
 
 ## Установка
-@'
-# GraphRAG
-
-Извлечение сущностей и связей из русского текста (Natasha), построение графа знаний (NetworkX), загрузка в Neo4j.
-
-## Стек
-Python 3.13, spaCy, Natasha, NetworkX, Neo4j (Docker), LangChain.
-
-## Установка
 python -m venv venv
 .\venv\Scripts\activate
 pip install -r requirements.txt
