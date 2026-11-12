@@ -49,31 +49,107 @@ class MockLLM:
 
 
 class OllamaLLM:
-    """Stub for local Ollama provider. Not used in demo."""
+    """Local Ollama provider via HTTP /api/generate.
 
-    def __init__(self, model: str = "qwen2.5:7b", host: str = "http://localhost:11434") -> None:
-        self.model = model
-        self.host = host
+    Env:
+        OLLAMA_HOST  default http://localhost:11434
+        OLLAMA_MODEL default qwen2.5:7b
+    Falls back to MockLLM answer if Ollama unreachable.
+    """
 
-    def answer(self, question: str, facts: Sequence[Fact]) -> str:  # pragma: no cover
-        raise NotImplementedError(
-            "OllamaLLM is a stub. Wire it up via ollama-python if needed: "
-            "pip install ollama; then POST /api/generate."
-        )
+    PROMPT_TMPL = (
+        "Ты — ассистент по графу знаний. Ответь на вопрос, "
+        "используя ТОЛЬКО перечисленные факты. Если фактов недостаточно — так и скажи.\n\n"
+        "Факты:\n{facts}\n\nВопрос: {question}\nОтвет:"
+    )
+
+    def __init__(
+        self,
+        model: str | None = None,
+        host: str | None = None,
+        timeout: float = 60.0,
+    ) -> None:
+        import os
+
+        self.model = model or os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+        self.host = (host or os.getenv("OLLAMA_HOST", "http://localhost:11434")).rstrip("/")
+        self.timeout = timeout
+
+    def _facts_block(self, facts: Sequence[Fact]) -> str:
+        if not facts:
+            return "(фактов нет)"
+        return "\n".join(f"- {f.as_text()}" for f in facts)
+
+    def answer(self, question: str, facts: Sequence[Fact]) -> str:
+        import httpx
+
+        prompt = self.PROMPT_TMPL.format(facts=self._facts_block(facts), question=question)
+        try:
+            r = httpx.post(
+                f"{self.host}/api/generate",
+                json={"model": self.model, "prompt": prompt, "stream": False},
+                timeout=self.timeout,
+            )
+            r.raise_for_status()
+            data = r.json()
+            text = (data.get("response") or "").strip()
+            if text:
+                return text
+        except Exception as exc:  # noqa: BLE001
+            return (
+                f"[OllamaLLM недоступна: {exc!r}] "
+                + MockLLM().answer(question, facts)
+            )
+        return MockLLM().answer(question, facts)
 
 
 class OpenAILLM:
-    """Stub for OpenAI-compatible provider. Not used in demo."""
+    """OpenAI-compatible provider (lazy import, optional dep).
 
-    def __init__(self, model: str = "gpt-4o-mini", api_key: str | None = None) -> None:
-        self.model = model
-        self.api_key = api_key
+    Env:
+        OPENAI_API_KEY required
+        OPENAI_MODEL   default gpt-4o-mini
+        OPENAI_BASE_URL optional (for compatible endpoints)
+    Falls back to MockLLM on errors / missing key.
+    """
 
-    def answer(self, question: str, facts: Sequence[Fact]) -> str:  # pragma: no cover
-        raise NotImplementedError(
-            "OpenAILLM is a stub. Wire it up via openai-python if needed: "
-            "pip install openai; set OPENAI_API_KEY in .env."
-        )
+    def __init__(
+        self,
+        model: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ) -> None:
+        import os
+
+        self.model = model or os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        self.base_url = base_url or os.getenv("OPENAI_BASE_URL")
+
+    def answer(self, question: str, facts: Sequence[Fact]) -> str:
+        if not self.api_key:
+            return "[OpenAILLM: нет OPENAI_API_KEY] " + MockLLM().answer(question, facts)
+        try:
+            from openai import OpenAI  # type: ignore[import-not-found]
+        except Exception:
+            return (
+                "[OpenAILLM: пакет openai не установлен — pip install openai] "
+                + MockLLM().answer(question, facts)
+            )
+
+        facts_block = "\n".join(f"- {f.as_text()}" for f in facts) or "(фактов нет)"
+        client = OpenAI(api_key=self.api_key, base_url=self.base_url)
+        try:
+            resp = client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "Отвечай только по данным фактам, кратко."},
+                    {"role": "user", "content": f"Факты:\n{facts_block}\n\nВопрос: {question}"},
+                ],
+                temperature=0.2,
+            )
+            return (resp.choices[0].message.content or "").strip() or MockLLM().answer(question, facts)
+        except Exception as exc:  # noqa: BLE001
+            return f"[OpenAILLM ошибка: {exc!r}] " + MockLLM().answer(question, facts)
 
 
 def get_llm(provider: str = "mock") -> LLMClient:

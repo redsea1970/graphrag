@@ -9,3 +9,4 @@ neo4j
 python-dotenv
 pytest
 setuptools<81
+httpx>=0.28

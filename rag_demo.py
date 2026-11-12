@@ -3,9 +3,11 @@
 Usage:
     python rag_demo.py "Где работает Иван Петров?"
     python rag_demo.py                 # interactive loop
+    python rag_demo.py --llm ollama "Вопрос"
+    python rag_demo.py --llm openai "Вопрос"
 
 Backend: Neo4j if reachable, else output/graph.json (offline fallback).
-LLM: MockLLM (deterministic demo, no keys).
+LLM: --llm mock|ollama|openai (default mock; ollama/openai auto-fallback to mock).
 """
 from __future__ import annotations
 
@@ -42,11 +44,25 @@ def print_result(res) -> None:
 
 
 def main(argv: list[str]) -> int:
-    retriever = build_retriever()
-    pipe = RAGPipeline(retriever, get_llm("mock"))
+    import argparse
 
-    if len(argv) > 1:
-        q = " ".join(argv[1:]).strip()
+    ap = argparse.ArgumentParser(description="GraphRAG demo CLI")
+    ap.add_argument("question", nargs="*", help="вопрос (иначе интерактив)")
+    ap.add_argument(
+        "--llm",
+        default="mock",
+        choices=["mock", "ollama", "openai"],
+        help="LLM provider (default: mock)",
+    )
+    args = ap.parse_args(argv[1:])
+
+    retriever = build_retriever()
+    llm = get_llm(args.llm)
+    print(f"[llm] {llm.__class__.__name__} (provider={args.llm})")
+    pipe = RAGPipeline(retriever, llm)
+
+    if args.question:
+        q = " ".join(args.question).strip()
         print_result(pipe.ask(q))
     else:
         print("Interactive RAG demo. Empty line to exit.")
